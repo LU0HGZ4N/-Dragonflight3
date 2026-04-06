@@ -412,24 +412,48 @@ DF:NewModule('spellbook', 1, 'PLAYER_ENTERING_WORLD', function()
         end
         spellbook.Tabs = {}
 
-        local numTabs = GetNumSpellTabs()
+        local numTabs = 0
+        while GetSpellTabInfo(numTabs + 1) do
+            numTabs = numTabs + 1
+        end
+
+        local tabData = {}
         for tabIndex = 1, numTabs do
             local name, texture, offset, numSpells = GetSpellTabInfo(tabIndex)
             if numSpells > 0 then
                 name = DF.mixins.CleanTurtleTabName(name)
                 name = string.gsub(name, ' Combat', '')
-                local capturedIndex = tabIndex
-                local spacing = 2
-                if tabIndex == 2 then
-                    spacing = 10
-                end
-                spellbook:AddTab(name, function()
-                    spellbook.bookType = BOOKTYPE_SPELL
-                    spellbook.selectedTabIndex = capturedIndex
-                    spellbook.currentPage = 1
-                    spellbook:UpdateSpellDisplay()
-                end, 90, spacing)
+                table.insert(tabData, { name = name, index = tabIndex })
             end
+        end
+
+        local function getTabWeight(name)
+            if name == "Mounts" then return 100 end
+            if name == "Companions" then return 101 end
+            return 10
+        end
+
+        table.sort(tabData, function(a, b)
+            local wA = getTabWeight(a.name)
+            local wB = getTabWeight(b.name)
+            if wA == wB then
+                return a.index < b.index
+            end
+            return wA < wB
+        end)
+
+        for i, data in ipairs(tabData) do
+            local spacing = 2
+            if i == 2 then
+                spacing = 10
+            end
+            local capturedIndex = data.index
+            spellbook:AddTab(data.name, function()
+                spellbook.bookType = BOOKTYPE_SPELL
+                spellbook.selectedTabIndex = capturedIndex
+                spellbook.currentPage = 1
+                spellbook:UpdateSpellDisplay()
+            end, 90, spacing)
         end
 
         local hasPetSpells, petToken = HasPetSpells()
@@ -510,7 +534,10 @@ DF:NewModule('spellbook', 1, 'PLAYER_ENTERING_WORLD', function()
             end
         elseif event == 'PET_BAR_UPDATE' or (event == 'UNIT_PET' and arg1 == 'player') or event == 'SPELLS_CHANGED' then
             if event == 'SPELLS_CHANGED' then
-                local numTabs = GetNumSpellTabs()
+                local numTabs = 0
+                while GetSpellTabInfo(numTabs + 1) do
+                    numTabs = numTabs + 1
+                end
                 if spellbook.lastNumTabs ~= numTabs then
                     local oldTab = spellbook.selectedTabIndex
                     spellbook:CreateDynamicTabs()
