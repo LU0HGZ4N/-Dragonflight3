@@ -350,20 +350,34 @@ DF:NewModule('bags', 1, 'PLAYER_AFTER_ENTERING_WORLD', function()
     end
     if DF.setups.bags.unified then
         DF.setups.bags.unified:RegisterEvent('BAG_UPDATE')
+        DF.setups.bags.unified:RegisterEvent('BAG_CLOSED')
+        DF.setups.bags.unified:RegisterEvent('UNIT_INVENTORY_CHANGED')
         DF.setups.bags.unified:RegisterEvent('BAG_UPDATE_COOLDOWN')
         DF.setups.bags.unified:RegisterEvent('ITEM_LOCK_CHANGED')
+        DF.setups.bags.unified.updateTimer = 0
+        DF.setups.bags.unified:SetScript('OnUpdate', function()
+            if this.needsUpdate then
+                this.updateTimer = this.updateTimer - arg1
+                if this.updateTimer <= 0 then
+                    this.needsUpdate = false
+                    setup:UpdateOneBagSlots(this)
+                    setup:UpdateBag(this)
+                    if DF_Profiles and DF.profile['bags'] and DF.profile['bags']['showItemRarity'] then
+                        helpers.UpdateQualityBorders(true)
+                    end
+                    if DF_Profiles and DF.profile['bags'] and DF.profile['bags']['showQuestItems'] then
+                        helpers.ProcessQuestIcons(this.slots, true)
+                    end
+                    if DF_Profiles and DF.profile['bags'] and DF.profile['bags']['showUnusableItems'] and DF.profile['bags']['showUnusableItems'] ~= 'none' then
+                        setup:UpdateUnusableItems(this)
+                    end
+                end
+            end
+        end)
         DF.setups.bags.unified:SetScript('OnEvent', function()
-            if event == 'BAG_UPDATE' then
-                setup:UpdateBag(this)
-                if DF_Profiles and DF.profile['bags'] and DF.profile['bags']['showItemRarity'] then
-                    helpers.UpdateQualityBorders(true)
-                end
-                if DF_Profiles and DF.profile['bags'] and DF.profile['bags']['showQuestItems'] then
-                    helpers.ProcessQuestIcons(this.slots, true)
-                end
-                if DF_Profiles and DF.profile['bags'] and DF.profile['bags']['showUnusableItems'] and DF.profile['bags']['showUnusableItems'] ~= 'none' then
-                    setup:UpdateUnusableItems(this)
-                end
+            if event == 'BAG_UPDATE' or event == 'BAG_CLOSED' or (event == 'UNIT_INVENTORY_CHANGED' and arg1 == 'player') then
+                this.needsUpdate = true
+                this.updateTimer = 0.05
             elseif event == 'BAG_UPDATE_COOLDOWN' then
                 setup:UpdateBag(this)
             elseif event == 'ITEM_LOCK_CHANGED' then

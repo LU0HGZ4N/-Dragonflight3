@@ -16,7 +16,10 @@ DF:NewDefaults('collector', {
 })
 
 DF:NewModule('collector', 1, 'PLAYER_ENTERING_WORLD', function()
-    local buttonsFound = DF.lib.CreateButtonSkinner()
+    local LayoutButtons
+    local buttonsFound = DF.lib.CreateButtonSkinner(function(buttons)
+        if LayoutButtons then LayoutButtons(buttons) end
+    end)
 
     local collectorFrame
     local expandButton = DF.ui.ExpandButton(UIParent, 28, 17, nil, function(isChecked)
@@ -71,7 +74,7 @@ DF:NewModule('collector', 1, 'PLAYER_ENTERING_WORLD', function()
 
     collectorFrame:Hide()
 
-    local function LayoutButtons(buttons)
+    LayoutButtons = function(buttons)
         local buttonsPerRow = DF.profile['collector']['buttonsPerRow']
         local spacing = DF.profile['collector']['spacing']
         local buttonScale = DF.profile['collector']['buttonScale'] / 100

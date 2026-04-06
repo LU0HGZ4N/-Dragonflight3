@@ -509,10 +509,27 @@ DF:NewModule('spellbook', 1, 'PLAYER_ENTERING_WORLD', function()
                 end
             end
         elseif event == 'PET_BAR_UPDATE' or (event == 'UNIT_PET' and arg1 == 'player') or event == 'SPELLS_CHANGED' then
+            if event == 'SPELLS_CHANGED' then
+                local numTabs = GetNumSpellTabs()
+                if spellbook.lastNumTabs ~= numTabs then
+                    local oldTab = spellbook.selectedTabIndex
+                    spellbook:CreateDynamicTabs()
+                    spellbook.lastNumTabs = numTabs
+                    if type(oldTab) == 'number' and spellbook.Tabs[oldTab] then
+                        spellbook.Tabs[oldTab]:SetSelected(true)
+                        spellbook.selectedTab = spellbook.Tabs[oldTab]
+                        spellbook.selectedTabIndex = oldTab
+                    elseif oldTab == 'pet' and spellbook.petTab then
+                        spellbook.petTab:SetSelected(true)
+                        spellbook.selectedTab = spellbook.petTab
+                        spellbook.selectedTabIndex = 'pet'
+                    end
+                end
+            end
             if spellbook.UpdatePetTab then
                 spellbook:UpdatePetTab()
             end
-            if spellbook.bookType == BOOKTYPE_PET and spellbook:IsShown() then
+            if spellbook:IsShown() then
                 spellbook:UpdateSpellDisplay()
             end
         end

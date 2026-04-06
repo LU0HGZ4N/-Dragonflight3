@@ -166,6 +166,8 @@ end
 function setup:OnEvent()
     self.eventFrame = CreateFrame('Frame')
     self.eventFrame:RegisterEvent('BAG_UPDATE')
+    self.eventFrame:RegisterEvent('UNIT_INVENTORY_CHANGED')
+    self.eventFrame:RegisterEvent('BAG_CLOSED')
     self.eventFrame:SetScript('OnEvent', function()
         for i = 0, 3 do
             setup:UpdateBagIcon(setup.smallBags[i], i + 1)

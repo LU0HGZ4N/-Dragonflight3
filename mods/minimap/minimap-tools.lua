@@ -316,7 +316,7 @@ function DF.lib.CreateCustomPlayerArrow()
     return arrowFrame, arrowTex, playerArrow
 end
 
-function DF.lib.CreateButtonSkinner()
+function DF.lib.CreateButtonSkinner(onUpdateCallback)
     local function ScanForButtons()
         local ignored = {'Note', 'JQuest', 'Naut_', 'MinimapIcon', 'GatherMatePin', 'WestPointer', 'Chinchilla_', 'SmartMinimapZoom', 'QuestieNote', 'smm', 'pfMiniMapPin', 'MiniMapBattlefieldFrame', 'pfMinimapButton', 'GatherNote', 'MiniNotePOI', 'FWGMinimapPOI', 'RecipeRadarMinimapIcon', 'MiniMapTracking', 'CartographerNotesPOI'}
         local buttons = {}
@@ -404,16 +404,21 @@ function DF.lib.CreateButtonSkinner()
     local skinned = {}
     local timerId = DF.timers.every(0.1, function()
         local buttons = ScanForButtons()
+        local changed = false
         for _, name in ipairs(buttons) do
             if not skinned[name] then
                 local btn = _G[name]
                 SkinButtons({name})
                 skinned[name] = btn
+                changed = true
             end
+        end
+        if changed and onUpdateCallback then
+            onUpdateCallback(skinned)
         end
     end)
 
-    DF.timers.delay(2, function()
+    DF.timers.delay(10, function()
         DF.timers.cancel(timerId)
     end)
 

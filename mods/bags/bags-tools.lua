@@ -386,12 +386,14 @@ end
 function setup:CreateOneBag()
     local totalSlots = 0
     local bagSlots = {}
+    local layoutStr = ''
 
     for i = 0, 4 do
         local slots = i == 0 and 16 or (GetContainerNumSlots(i) or 0)
         if slots > 0 then
             bagSlots[i] = slots
             totalSlots = totalSlots + slots
+            layoutStr = layoutStr .. i .. ':' .. slots .. ';'
         end
     end
 
@@ -408,6 +410,7 @@ function setup:CreateOneBag()
     bag:SetID(999)
     bag.slots = {}
     bag.isUnified = true
+    bag.layoutStr = layoutStr
 
     local bigbagFrame = CreateFrame('Frame', nil, bag)
     bigbagFrame:SetFrameLevel(bag:GetFrameLevel() + 1)
@@ -564,12 +567,15 @@ function setup:CreateOneBag()
     local row = 0
     local col = 0
 
+    bag.allButtons = {}
     for bagID = 0, 4 do
         if bagSlots[bagID] then
             for slot = 1, bagSlots[bagID] do
                 local btn = self:CreateSlotButton(bag, frameName, slotIndex, bagID, buttonSize, spacing, col, row)
                 btn.slotID = slot
+                btn:SetID(slot)
                 table.insert(bag.slots, btn)
+                table.insert(bag.allButtons, btn)
 
                 col = col + 1
                 if col >= cols then
@@ -603,6 +609,113 @@ function setup:CreateOneBag()
 
     self.unified = bag
     return bag
+end
+
+function setup:UpdateOneBagSlots(bag)
+    local totalSlots = 0
+    local bagSlots = {}
+    local layoutStr = ''
+
+    for i = 0, 4 do
+        local slots = i == 0 and 16 or (GetContainerNumSlots(i) or 0)
+        if slots > 0 then
+            bagSlots[i] = slots
+            totalSlots = totalSlots + slots
+            layoutStr = layoutStr .. i .. ':' .. slots .. ';'
+        end
+    end
+
+    if not bag.slots then bag.slots = {} end
+    if bag.layoutStr == layoutStr then
+        return false -- no structure change
+    end
+    bag.layoutStr = layoutStr
+
+    if not bag.allButtons then
+        bag.allButtons = {}
+        for _, btn in ipairs(bag.slots) do
+            table.insert(bag.allButtons, btn)
+        end
+    end
+
+    for _, btn in ipairs(bag.allButtons) do
+        btn:Hide()
+        btn:ClearAllPoints()
+    end
+    
+    bag.slots = {}
+
+    local cols = DF_Profiles and DF.profile['bags'] and DF.profile['bags']['oneBagButtonsPerRow'] or 8
+    local rows = math.ceil(totalSlots / cols)
+    local buttonSize = 37
+    local spacing = 4
+    
+    bag:SetWidth(20 + (cols * (buttonSize + spacing)))
+    bag:SetHeight(100 + (rows * (buttonSize + spacing)))
+
+    local slotIndex = 1
+    local row = 0
+    local col = 0
+    local frameName = bag:GetName()
+
+    for bagID = 0, 4 do
+        if bagSlots[bagID] then
+            for slot = 1, bagSlots[bagID] do
+                local btn = bag.allButtons[slotIndex]
+                if not btn then
+                    btn = self:CreateSlotButton(bag, frameName, slotIndex, bagID, buttonSize, spacing, col, row)
+                    table.insert(bag.allButtons, btn)
+                    if self.helpers then
+                        if not btn.qualityBorder then
+                            btn.qualityBorder = CreateFrame('Frame', nil, btn)
+                            btn.qualityBorder:SetAllPoints(btn)
+                            btn.qualityBorder:SetFrameLevel(btn:GetFrameLevel() + 7)
+                            btn.qualityBorderTex = btn.qualityBorder:CreateTexture(nil, 'OVERLAY')
+                            btn.qualityBorderTex:SetTexture(media['tex:actionbars:btn_highlight_strong.blp'])
+                            btn.qualityBorderTex:SetPoint('TOPLEFT', btn.qualityBorder, 'TOPLEFT', -4, 4)
+                            btn.qualityBorderTex:SetPoint('BOTTOMRIGHT', btn.qualityBorder, 'BOTTOMRIGHT', 4, -4)
+                            btn.qualityBorder:Hide()
+                        end
+                        if DF_Profiles and DF.profile['bags'] then
+                            local p = DF.profile['bags']
+                            btn:SetAlpha(p['slotAlpha'] or 1)
+                            if btn.highlightTex then
+                                local hc = p['highlightColour'] or {1,1,1,1}
+                                btn.highlightTex:SetVertexColor(hc[1], hc[2], hc[3], hc[4])
+                            end
+                            if btn.border then
+                                local borderTex = btn.border:GetRegions()
+                                if borderTex then
+                                    local bdc = p['borderColour'] or {1,1,1,1}
+                                    borderTex:SetVertexColor(bdc[1], bdc[2], bdc[3], bdc[4])
+                                end
+                            end
+                            local oa = p['overlayAlpha'] or 1
+                            if btn.unusableBorder then btn.unusableBorder:SetAlpha(oa) end
+                            if btn.qualityBorder then btn.qualityBorder:SetAlpha(oa) end
+                            if btn.checked then btn.checked:SetAlpha(oa) end
+                        end
+                    end
+                end
+                
+                btn.bagID = bagID
+                btn.slotID = slot
+                btn:SetID(slot)
+                btn:SetPoint('BOTTOMRIGHT', bag, 'BOTTOMRIGHT', -10 - (col * (buttonSize + spacing)), 10 + (row * (buttonSize + spacing)))
+                btn:Show()
+                table.insert(bag.slots, btn)
+
+                col = col + 1
+                if col >= cols then
+                    col = 0
+                    row = row + 1
+                end
+                slotIndex = slotIndex + 1
+            end
+        end
+    end
+    
+    return true
 end
 
 -- updates
