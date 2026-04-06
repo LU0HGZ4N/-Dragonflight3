@@ -325,10 +325,28 @@ DF:NewModule('bagbar', 1, 'PLAYER_LOGIN', function()
             if not mainBag.FreeSlotsUpdater then
                 local updater = CreateFrame('Frame')
                 updater:RegisterEvent('BAG_UPDATE')
+                updater:RegisterEvent('BAG_CLOSED')
+                updater:RegisterEvent('UNIT_INVENTORY_CHANGED')
+                updater.needsUpdate = true
+                updater.updateTimer = 0.05
+                updater:SetScript('OnUpdate', function()
+                    if this.needsUpdate then
+                        this.updateTimer = this.updateTimer - arg1
+                        if this.updateTimer <= 0 then
+                            this.needsUpdate = false
+                            local freeSlots, totalSlots = helpers.GetBagFreeAndTotal()
+                            if mainBag.FreeSlotsText then
+                                mainBag.FreeSlotsText:SetText(freeSlots .. ' / ' .. totalSlots)
+                                helpers.UpdateFreeSlotsColor()
+                            end
+                        end
+                    end
+                end)
                 updater:SetScript('OnEvent', function()
-                    local freeSlots, totalSlots = helpers.GetBagFreeAndTotal()
-                    mainBag.FreeSlotsText:SetText(freeSlots .. ' / ' .. totalSlots)
-                    helpers.UpdateFreeSlotsColor()
+                    if event == 'BAG_UPDATE' or event == 'BAG_CLOSED' or (event == 'UNIT_INVENTORY_CHANGED' and arg1 == 'player') then
+                        this.needsUpdate = true
+                        this.updateTimer = 0.05
+                    end
                 end)
                 mainBag.FreeSlotsUpdater = updater
             end
