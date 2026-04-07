@@ -479,22 +479,31 @@ DF:NewModule('dock', 1, 'PLAYER_AFTER_ENTERING_WORLD',function()
             sector.pattern = string.gsub(DURABILITY_TEMPLATE, '%%[^%s]+', '(.+)')
         end
 
-        local lowestPercent = 100
+        local totalCur = 0
+        local totalMax = 0
+        
         for _, slot in pairs(sector.slots) do
             local hasItem = sector.scanner:SetInventoryItem('player', slot)
             if hasItem then
                 local _, cur, max = sector.scanner:FindText(sector.pattern)
                 if cur and max then
-                    local percent = math.floor((tonumber(cur) / tonumber(max)) * 100)
-                    if percent < lowestPercent then
-                        lowestPercent = percent
+                    local numCur = tonumber(cur)
+                    local numMax = tonumber(max)
+                    if numCur and numMax and numMax > 0 then
+                        totalCur = totalCur + numCur
+                        totalMax = totalMax + numMax
                     end
                 end
             end
         end
 
-        local durColor = helpers.GetThresholdColor(lowestPercent, 25, 50)
-        sector.text:SetText('DUR: '..helpers.ColorNum(lowestPercent, durColor)..'%')
+        local finalPercent = 100
+        if totalMax > 0 then
+            finalPercent = math.floor((totalCur / totalMax) * 100)
+        end
+
+        local durColor = helpers.GetThresholdColor(finalPercent, 25, 50)
+        sector.text:SetText('DUR: '..helpers.ColorNum(finalPercent, durColor)..'%')
     end
 
     function widget:Ammo(sector)
@@ -518,18 +527,18 @@ DF:NewModule('dock', 1, 'PLAYER_AFTER_ENTERING_WORLD',function()
             sector.text:SetFont(STANDARD_TEXT_FONT, 9)
             sector.text:SetPoint('CENTER', sector, 'CENTER', 0, 0)
         end
+        local freeSlots = 0
         local maxSlots = 0
-        local usedSlots = 0
-        for bag = 0, 4 do
-            local bagSize = GetContainerNumSlots(bag)
-            maxSlots = maxSlots + bagSize
-            for slot = 1, bagSize do
-                if GetContainerItemLink(bag, slot) then
-                    usedSlots = usedSlots + 1
+        for bag = 0, NUM_BAG_SLOTS do
+            local numSlots = GetContainerNumSlots(bag)
+            maxSlots = maxSlots + numSlots
+            for slot = 1, numSlots do
+                local texture = GetContainerItemInfo(bag, slot)
+                if not texture then
+                    freeSlots = freeSlots + 1
                 end
             end
         end
-        local freeSlots = maxSlots - usedSlots
         local freePercent = (freeSlots / maxSlots) * 100
         local bagColor = helpers.GetThresholdColor(freePercent, 20, 50)
         sector.text:SetText('BAG: '..helpers.ColorNum(freeSlots, bagColor)..' / '..maxSlots)
@@ -611,10 +620,20 @@ DF:NewModule('dock', 1, 'PLAYER_AFTER_ENTERING_WORLD',function()
         end
     end)
 
+    local dockUpdates = {
+        bagspace = false,
+        ammo = false,
+        durability = false
+    }
+
     local elapsed = 0
+    local throttleTimer = 0
+    local durTimer = 0
     local updateFrame = CreateFrame'Frame'
     updateFrame:SetScript('OnUpdate', function()
         elapsed = elapsed + arg1
+        durTimer = durTimer + arg1
+
         if elapsed >= 0.5 then
             for i = 1, 6 do
                 if fpsSectors[i] and DF.profile.dock['sector'..i..'Widget'] ~= 'none' then
@@ -622,6 +641,44 @@ DF:NewModule('dock', 1, 'PLAYER_AFTER_ENTERING_WORLD',function()
                 end
             end
             elapsed = 0
+        end
+
+        if durTimer >= 2.0 then
+            dockUpdates.durability = true
+            durTimer = 0
+        end
+
+        if dockUpdates.bagspace or dockUpdates.ammo or dockUpdates.durability then
+            throttleTimer = throttleTimer + arg1
+            if throttleTimer >= 0.05 then
+                if dockUpdates.bagspace then
+                    for i = 1, 6 do
+                        if DF.profile.dock['sector'..i..'Widget'] == 'bagspace' then
+                            widget:Bagspace(sectors[i])
+                        end
+                    end
+                    dockUpdates.bagspace = false
+                end
+                if dockUpdates.ammo then
+                    for i = 1, 6 do
+                        if DF.profile.dock['sector'..i..'Widget'] == 'ammo' then
+                            widget:Ammo(sectors[i])
+                        end
+                    end
+                    dockUpdates.ammo = false
+                end
+                if dockUpdates.durability then
+                    for i = 1, 6 do
+                        if DF.profile.dock['sector'..i..'Widget'] == 'durability' then
+                            widget:Durability(sectors[i])
+                        end
+                    end
+                    dockUpdates.durability = false
+                end
+                throttleTimer = 0
+            end
+        else
+            throttleTimer = 0
         end
     end)
 
@@ -667,25 +724,13 @@ DF:NewModule('dock', 1, 'PLAYER_AFTER_ENTERING_WORLD',function()
             end
         end
         if event == 'UPDATE_INVENTORY_DURABILITY' or (event == 'UNIT_INVENTORY_CHANGED' and arg1 == 'player') then
-            for i = 1, 6 do
-                if DF.profile.dock['sector'..i..'Widget'] == 'durability' then
-                    widget:Durability(sectors[i])
-                end
-            end
+            dockUpdates.durability = true
         end
         if (event == 'UNIT_INVENTORY_CHANGED' and arg1 == 'player') or event == 'BAG_UPDATE' then
-            for i = 1, 6 do
-                if DF.profile.dock['sector'..i..'Widget'] == 'ammo' then
-                    widget:Ammo(sectors[i])
-                end
-            end
+            dockUpdates.ammo = true
         end
         if event == 'BAG_UPDATE' then
-            for i = 1, 6 do
-                if DF.profile.dock['sector'..i..'Widget'] == 'bagspace' then
-                    widget:Bagspace(sectors[i])
-                end
-            end
+            dockUpdates.bagspace = true
         end
             if event == 'PLAYER_REGEN_DISABLED' then
                 for i = 1, 6 do
