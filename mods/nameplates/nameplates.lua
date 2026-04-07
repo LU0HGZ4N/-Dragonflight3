@@ -66,6 +66,9 @@ DF:NewDefaults('nameplates', {
     colorReactionNeutral = {value = {0.9, 0.8, 0.2}, metadata = {element = 'colorpicker', category = 'Healthbar Colors', indexInCategory = 16, description = 'Neutral color', dependency = {key = 'colorReaction', state = true}}},
     colorReactionHostile = {value = {0.9, 0.2, 0.2}, metadata = {element = 'colorpicker', category = 'Healthbar Colors', indexInCategory = 17, description = 'Hostile color', dependency = {key = 'colorReaction', state = true}}},
     colorFallback = {value = {0, 1, 0}, metadata = {element = 'colorpicker', category = 'Healthbar Colors', indexInCategory = 18, description = 'Fallback color'}},
+    colorAggro = {value = false, metadata = {element = 'checkbox', category = 'Healthbar Colors', indexInCategory = 19, description = 'Color by Aggro (Threat)'}},
+    colorAggroMe = {value = {1, 0.1, 0.1}, metadata = {element = 'colorpicker', category = 'Healthbar Colors', indexInCategory = 20, description = 'Aggro on YOU (Tanking)', dependency = {key = 'colorAggro', state = true}}},
+    colorAggroOther = {value = {1, 0.6, 0.1}, metadata = {element = 'colorpicker', category = 'Healthbar Colors', indexInCategory = 21, description = 'Aggro on OTHERS (Losing threat)', dependency = {key = 'colorAggro', state = true}}},
 })
 
 DF:NewModule('nameplates', 1, 'PLAYER_ENTERING_WORLD', function()
@@ -99,7 +102,10 @@ DF:NewModule('nameplates', 1, 'PLAYER_ENTERING_WORLD', function()
         reactionFriendly = nil,
         reactionNeutral = nil,
         reactionHostile = nil,
-        fallbackColor = nil
+        fallbackColor = nil,
+        aggro = false,
+        aggroMe = nil,
+        aggroOther = nil
     }
 
     callbackHelper.GetDistanceColor = function(guid)
@@ -160,6 +166,22 @@ DF:NewModule('nameplates', 1, 'PLAYER_ENTERING_WORLD', function()
     callbackHelper.UpdateHealthbarColor = function(frame, guid)
         local hp = frame.custom.healthbar
         local states = callbackHelper.colorStates
+
+        -- Priority 0: Aggro (Tanking logic via SuperWoW guid..target)
+        if states.aggro and UnitCanAttack("player", guid) then
+            local targetUnit = guid .. "target"
+            if UnitExists(targetUnit) then
+                if UnitIsUnit(targetUnit, "player") then
+                    local c = states.aggroMe
+                    hp:SetStatusBarColor(c[1], c[2], c[3], 1)
+                    return
+                else
+                    local c = states.aggroOther
+                    hp:SetStatusBarColor(c[1], c[2], c[3], 1)
+                    return
+                end
+            end
+        end
 
         -- Priority 1: Tagged
         if states.tagged then
@@ -373,6 +395,18 @@ DF:NewModule('nameplates', 1, 'PLAYER_ENTERING_WORLD', function()
 
     callbacks.colorFallback = function(value)
         callbackHelper.colorStates.fallbackColor = value
+    end
+
+    callbacks.colorAggro = function(value)
+        callbackHelper.colorStates.aggro = value
+    end
+
+    callbacks.colorAggroMe = function(value)
+        callbackHelper.colorStates.aggroMe = value
+    end
+
+    callbacks.colorAggroOther = function(value)
+        callbackHelper.colorStates.aggroOther = value
     end
 
     callbacks.scaleNameplates = function(value)
