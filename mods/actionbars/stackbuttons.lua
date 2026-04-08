@@ -148,6 +148,13 @@ DF:NewModule('stackbuttons', 2, 'PLAYER_LOGIN', function()
     end
 
     function stack:PopulateSpells()
+        if self.allSpellButtons then
+            for i = 1, table.getn(self.allSpellButtons) do
+                self.allSpellButtons[i]:Hide()
+            end
+        end
+        self.allSpellButtons = {}
+        
         local numTabs = GetNumSpellTabs()
         local spellIndex = 1
         local perRow = 7
@@ -188,9 +195,11 @@ DF:NewModule('stackbuttons', 2, 'PLAYER_LOGIN', function()
                         this.highlight:Hide()
                         GameTooltip:Hide()
                     end)
+                    btn.spellNameOriginal = spellName
                     btn:SetScript('OnDragStart', function()
+                        local tex = GetSpellTexture(this.spellID, BOOKTYPE_SPELL)
                         PickupSpell(this.spellID, BOOKTYPE_SPELL)
-                        stack.draggedSpell = {name = spellName, texture = spellTexture, spellID = offset + i}
+                        stack.draggedSpell = {name = this.spellNameOriginal, texture = tex, spellID = this.spellID}
                     end)
                     btn.spellName = string.lower(spellName)
                     table.insert(self.allSpellButtons, btn)
@@ -210,6 +219,13 @@ DF:NewModule('stackbuttons', 2, 'PLAYER_LOGIN', function()
     end
 
     function stack:PopulateItems()
+        if self.allItemButtons then
+            for i = 1, table.getn(self.allItemButtons) do
+                self.allItemButtons[i]:Hide()
+            end
+        end
+        self.allItemButtons = {}
+        
         local itemIndex = 1
         local perRow = 7
         local btnSize = 32
@@ -222,7 +238,12 @@ DF:NewModule('stackbuttons', 2, 'PLAYER_LOGIN', function()
             local texture = GetInventoryItemTexture('player', invSlot)
             if texture then
                 local itemLink = GetInventoryItemLink('player', invSlot)
-                local itemName = itemLink
+                local cleanName = itemLink
+                if itemLink then
+                    local _, _, extracted = string.find(itemLink, "%[(.-)%]")
+                    if extracted then cleanName = extracted end
+                end
+                local itemName = cleanName
                 local btnName = 'DF_StackItemBtn' .. itemIndex
                 local btn = DF.ui.SlotButton(self.otherScroll.content, btnName, btnSize)
                 btn.bg:Hide()
@@ -251,11 +272,13 @@ DF:NewModule('stackbuttons', 2, 'PLAYER_LOGIN', function()
                     this.highlight:Hide()
                     GameTooltip:Hide()
                 end)
+                btn.cleanName = cleanName
                 btn:SetScript('OnDragStart', function()
+                    local tex = GetInventoryItemTexture('player', this.invSlot)
                     PickupInventoryItem(this.invSlot)
-                    stack.draggedItem = {name = itemName, texture = texture, invSlot = invSlot}
+                    stack.draggedItem = {name = this.cleanName, texture = tex, invSlot = this.invSlot}
                 end)
-                btn.itemName = string.lower(itemName or '')
+                btn.itemName = string.lower(cleanName or '')
                 table.insert(self.allItemButtons, btn)
 
                 col = col + 1
@@ -274,7 +297,12 @@ DF:NewModule('stackbuttons', 2, 'PLAYER_LOGIN', function()
                     local texture, itemCount = GetContainerItemInfo(bag, slot)
                     if texture then
                         local itemLink = GetContainerItemLink(bag, slot)
-                        local itemName = itemLink
+                        local cleanName = itemLink
+                        if itemLink then
+                            local _, _, extracted = string.find(itemLink, "%[(.-)%]")
+                            if extracted then cleanName = extracted end
+                        end
+                        local itemName = cleanName
                         local btnName = 'DF_StackItemBtn' .. itemIndex
                         local btn = DF.ui.SlotButton(self.otherScroll.content, btnName, btnSize)
                         btn.bg:Hide()
@@ -307,11 +335,13 @@ DF:NewModule('stackbuttons', 2, 'PLAYER_LOGIN', function()
                             this.highlight:Hide()
                             GameTooltip:Hide()
                         end)
+                        btn.cleanName = cleanName
                         btn:SetScript('OnDragStart', function()
+                            local tex = GetContainerItemInfo(this.bagID, this.slotID)
                             PickupContainerItem(this.bagID, this.slotID)
-                            stack.draggedItem = {name = itemName, texture = texture, bag = bag, slot = slot}
+                            stack.draggedItem = {name = this.cleanName, texture = tex, bag = this.bagID, slot = this.slotID}
                         end)
-                        btn.itemName = string.lower(itemName or '')
+                        btn.itemName = string.lower(cleanName or '')
                         table.insert(self.allItemButtons, btn)
 
                         col = col + 1
@@ -450,6 +480,16 @@ DF:NewModule('stackbuttons', 2, 'PLAYER_LOGIN', function()
             slot.highlightTex:SetPoint('TOPLEFT', slot.highlight, 'TOPLEFT', -4, 4)
             slot.highlightTex:SetPoint('BOTTOMRIGHT', slot.highlight, 'BOTTOMRIGHT', 4, -4)
             slot:RegisterForDrag('LeftButton')
+            slot:RegisterForClicks('LeftButtonUp', 'RightButtonUp')
+            slot:SetScript('OnClick', function()
+                if arg1 == 'RightButton' and stack.activeButton then
+                    local btnData = DF_CharData[stack.activeButton.btnID]
+                    if btnData then
+                        btnData[this.slotIndex] = nil
+                        stack:UpdateSlotButtons()
+                    end
+                end
+            end)
             slot:SetScript('OnEnter', function()
                 this.highlight:Show()
                 if stack.activeButton then
@@ -486,6 +526,12 @@ DF:NewModule('stackbuttons', 2, 'PLAYER_LOGIN', function()
             end)
             slot:SetScript('OnReceiveDrag', function()
                 if not stack.activeButton then return end
+                if not CursorHasItem() and not CursorHasSpell() then
+                    stack.draggedSpell = nil
+                    stack.draggedItem = nil
+                    stack.dragSource = nil
+                    return
+                end
                 local btnData = DF_CharData[stack.activeButton.btnID]
                 if not btnData then
                     btnData = {}
@@ -533,7 +579,26 @@ DF:NewModule('stackbuttons', 2, 'PLAYER_LOGIN', function()
         for i = 1, 5 do
             local slot = self.slotButtons[i]
             if btnData and btnData[i] then
-                slot.icon:SetTexture(btnData[i].texture)
+                local tex = btnData[i].texture
+                if not tex then
+                    if btnData[i].bag then
+                        local b, s = stack:FindItemInBags(btnData[i].name)
+                        if b and s then tex = GetContainerItemInfo(b, s) end
+                    elseif btnData[i].name then
+                        local numTabs = GetNumSpellTabs()
+                        for tab = 1, numTabs do
+                            local _, _, offset, numSpells = GetSpellTabInfo(tab)
+                            for j = 1, numSpells do
+                                if GetSpellName(offset + j, BOOKTYPE_SPELL) == btnData[i].name then
+                                    tex = GetSpellTexture(offset + j, BOOKTYPE_SPELL)
+                                    break
+                                end
+                            end
+                            if tex then break end
+                        end
+                    end
+                end
+                slot.icon:SetTexture(tex)
             else
                 slot.icon:SetTexture(nil)
             end
@@ -561,13 +626,17 @@ DF:NewModule('stackbuttons', 2, 'PLAYER_LOGIN', function()
     end
 
     function stack:FindItemInBags(itemName)
+        if not itemName then return nil, nil end
         for bag = 0, 4 do
             local numSlots = GetContainerNumSlots(bag)
             if numSlots then
                 for slot = 1, numSlots do
                     local itemLink = GetContainerItemLink(bag, slot)
-                    if itemLink and itemLink == itemName then
-                        return bag, slot
+                    if itemLink then
+                        local _, _, extracted = string.find(itemLink, "%[(.-)%]")
+                        if extracted == itemName or itemLink == itemName then
+                            return bag, slot
+                        end
                     end
                 end
             end
@@ -661,7 +730,26 @@ DF:NewModule('stackbuttons', 2, 'PLAYER_LOGIN', function()
         for i = 1, 5 do
             local slotData = btnData[i]
             if slotData then
-                btn.stackFrames[i].icon:SetTexture(slotData.texture)
+                local tex = slotData.texture
+                if not tex then
+                    if slotData.bag then
+                        local b, s = stack:FindItemInBags(slotData.name)
+                        if b and s then tex = GetContainerItemInfo(b, s) end
+                    elseif slotData.name then
+                        local numTabs = GetNumSpellTabs()
+                        for tab = 1, numTabs do
+                            local _, _, offset, numSpells = GetSpellTabInfo(tab)
+                            for j = 1, numSpells do
+                                if GetSpellName(offset + j, BOOKTYPE_SPELL) == slotData.name then
+                                    tex = GetSpellTexture(offset + j, BOOKTYPE_SPELL)
+                                    break
+                                end
+                            end
+                            if tex then break end
+                        end
+                    end
+                end
+                btn.stackFrames[i].icon:SetTexture(tex)
                 if slotData.bag then
                     local bag, slot = stack:FindItemInBags(slotData.name)
                     if bag and slot then
@@ -798,7 +886,11 @@ DF:NewModule('stackbuttons', 2, 'PLAYER_LOGIN', function()
             stack:CloseEditor()
         else
             stack.stackPanel:Show()
-            stack:RefreshData()
+            stack:PopulateSpells()
+            stack:PopulateItems()
+            if stack.searchBox:GetText() ~= '' then
+                stack:FilterButtons(stack.searchBox:GetText())
+            end
             for _, bar in pairs(setup.bars) do
                 for i = 1, table.getn(bar.buttons) do
                     local btn = bar.buttons[i]
