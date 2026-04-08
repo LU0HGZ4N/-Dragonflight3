@@ -201,6 +201,11 @@ DF:NewModule('stackbuttons', 2, 'PLAYER_LOGIN', function()
                         PickupSpell(this.spellID, BOOKTYPE_SPELL)
                         stack.draggedSpell = {name = this.spellNameOriginal, texture = tex, spellID = this.spellID}
                     end)
+                    btn:RegisterForClicks('LeftButtonUp')
+                    btn:SetScript('OnClick', function()
+                        local func = this:GetScript('OnDragStart')
+                        if func then func() end
+                    end)
                     btn.spellName = string.lower(spellName)
                     table.insert(self.allSpellButtons, btn)
 
@@ -278,6 +283,11 @@ DF:NewModule('stackbuttons', 2, 'PLAYER_LOGIN', function()
                     PickupInventoryItem(this.invSlot)
                     stack.draggedItem = {name = this.cleanName, texture = tex, invSlot = this.invSlot}
                 end)
+                btn:RegisterForClicks('LeftButtonUp')
+                btn:SetScript('OnClick', function()
+                    local func = this:GetScript('OnDragStart')
+                    if func then func() end
+                end)
                 btn.itemName = string.lower(cleanName or '')
                 table.insert(self.allItemButtons, btn)
 
@@ -340,6 +350,11 @@ DF:NewModule('stackbuttons', 2, 'PLAYER_LOGIN', function()
                             local tex = GetContainerItemInfo(this.bagID, this.slotID)
                             PickupContainerItem(this.bagID, this.slotID)
                             stack.draggedItem = {name = this.cleanName, texture = tex, bag = this.bagID, slot = this.slotID}
+                        end)
+                        btn:RegisterForClicks('LeftButtonUp')
+                        btn:SetScript('OnClick', function()
+                            local func = this:GetScript('OnDragStart')
+                            if func then func() end
                         end)
                         btn.itemName = string.lower(cleanName or '')
                         table.insert(self.allItemButtons, btn)
@@ -488,6 +503,9 @@ DF:NewModule('stackbuttons', 2, 'PLAYER_LOGIN', function()
                         btnData[this.slotIndex] = nil
                         stack:UpdateSlotButtons()
                     end
+                elseif arg1 == 'LeftButton' then
+                    local func = this:GetScript('OnReceiveDrag')
+                    if func then func() end
                 end
             end)
             slot:SetScript('OnEnter', function()
@@ -668,7 +686,6 @@ DF:NewModule('stackbuttons', 2, 'PLAYER_LOGIN', function()
                 frame.highlightTex:SetPoint('BOTTOMRIGHT', frame.highlight, 'BOTTOMRIGHT', 3, -3)
                 frame.countText = DF.ui.Font(frame, 10, '', {1, 1, 1}, 'RIGHT')
                 frame.countText:SetPoint('BOTTOMRIGHT', frame, 'BOTTOMRIGHT', -2, 2)
-                frame.cooldown = CreateFrame('Model', nil, frame, 'CooldownFrameTemplate')
                 frame.cooldown:SetAllPoints(frame)
                 frame:SetScript('OnEnter', function()
                     this.highlight:Show()
@@ -714,12 +731,58 @@ DF:NewModule('stackbuttons', 2, 'PLAYER_LOGIN', function()
                             if bag and slot then
                                 UseContainerItem(bag, slot)
                             end
+                        elseif slotData.invSlot then
+                            UseInventoryItem(slotData.invSlot)
                         elseif slotData.name then
                             CastSpellByName(slotData.name)
                         end
                         if not IsShiftKeyDown() then
                             stack:HideStackFrames(parentBtn, true)
                         end
+                    end
+                end)
+                frame:SetScript("OnUpdate", function()
+                    this.timer = (this.timer or 0) + arg1
+                    if this.timer < 0.5 then return end
+                    this.timer = 0
+                    local parentBtn = this:GetParent()
+                    local parentData = DF_CharData[parentBtn.btnID]
+                    if parentData and parentData[this.slotIndex] then
+                        local slotData = parentData[this.slotIndex]
+                        local start, duration = 0, 0
+                        if slotData.bag then
+                            local bag, slot = stack:FindItemInBags(slotData.name)
+                            if bag and slot then
+                                start, duration = GetContainerItemCooldown(bag, slot)
+                            end
+                        elseif slotData.invSlot then
+                            start, duration = GetInventoryItemCooldown('player', slotData.invSlot)
+                        elseif slotData.name then
+                            if not this.resolvedSpellName or this.resolvedSpellName ~= slotData.name then
+                                this.resolvedSpellID = nil
+                                this.resolvedSpellName = slotData.name
+                                local numTabs = GetNumSpellTabs()
+                                for tab = 1, numTabs do
+                                    local _, _, offset, numSpells = GetSpellTabInfo(tab)
+                                    for j = 1, numSpells do
+                                        if GetSpellName(offset + j, BOOKTYPE_SPELL) == slotData.name then
+                                            this.resolvedSpellID = offset + j
+                                            break
+                                        end
+                                    end
+                                    if this.resolvedSpellID then break end
+                                end
+                            end
+                            if this.resolvedSpellID then
+                                start, duration = GetSpellCooldown(this.resolvedSpellID, BOOKTYPE_SPELL)
+                            end
+                        end
+                        if this.lastStart ~= start or this.lastDuration ~= duration then
+                            this.lastStart = start
+                            this.lastDuration = duration
+                            CooldownFrame_SetTimer(this.cooldown, start, duration, 1)
+                        end
+                        this.icon:SetVertexColor(1.0, 1.0, 1.0)
                     end
                 end)
                 frame:Hide()
@@ -735,6 +798,8 @@ DF:NewModule('stackbuttons', 2, 'PLAYER_LOGIN', function()
                     if slotData.bag then
                         local b, s = stack:FindItemInBags(slotData.name)
                         if b and s then tex = GetContainerItemInfo(b, s) end
+                    elseif slotData.invSlot then
+                        tex = GetInventoryItemTexture('player', slotData.invSlot)
                     elseif slotData.name then
                         local numTabs = GetNumSpellTabs()
                         for tab = 1, numTabs do
@@ -761,10 +826,18 @@ DF:NewModule('stackbuttons', 2, 'PLAYER_LOGIN', function()
                             btn.stackFrames[i].countText:SetText('0')
                             btn.stackFrames[i].icon:SetVertexColor(0.4, 0.4, 0.4)
                         end
+                        local start, duration = GetContainerItemCooldown(bag, slot)
+                        CooldownFrame_SetTimer(btn.stackFrames[i].cooldown, start, duration, 1)
                     else
                         btn.stackFrames[i].countText:SetText('0')
                         btn.stackFrames[i].icon:SetVertexColor(0.4, 0.4, 0.4)
+                        CooldownFrame_SetTimer(btn.stackFrames[i].cooldown, 0, 0, 0)
                     end
+                elseif slotData.invSlot then
+                    btn.stackFrames[i].countText:SetText('')
+                    btn.stackFrames[i].icon:SetVertexColor(1, 1, 1)
+                    local start, duration = GetInventoryItemCooldown('player', slotData.invSlot)
+                    CooldownFrame_SetTimer(btn.stackFrames[i].cooldown, start, duration, 1)
                 else
                     btn.stackFrames[i].countText:SetText('')
                     btn.stackFrames[i].icon:SetVertexColor(1, 1, 1)
